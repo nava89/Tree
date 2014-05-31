@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="tree.css">
+    <script src="jquery191.js" type="text/javascript"></script>
+    <script src="jquery.tree.js" type="text/javascript"></script>
+    <title>Example Tree</title>
+</head>
+<body>
+	<div id="treeDiv" class="treeContainer">
+	</div>
+
+</body>
+
+<script type="text/javascript">
+	
+	 var naryTree =
+        '{"id" : "Alan1", "name":"Alan Crawford", "Age":20, "row":0, "col":3, "children":[\
+            {"id" : "Bert1", "name":"Alan Crawford", "Age":20, "row":1, "col":1, "children":[\
+                {"id" : "Alan2","name":"Alan Crawford", "Age":20, "row":2, "col":1, "children":[\
+                {"id" : "Alan3","name":"Alan Crawford", "Age":20, "row":3, "col":1,"children":[]} ]}\
+            ]},\
+            {"id" : "Bert2","name":"Alan Crawford", "Age":20, "row":1, "col":3, "children":[]},\
+            {"id" : "Bert3","name":"Alan Crawford", "Age":20, "row":1, "col":5, "children":[]}]\
+        }';
+
+    var detailsTemplate = '<div style="background-color:red; opacity:0.5; padding:5px;" ><h3 style="margin:0">{{name}}</h3></br>{{Age}}</div>';
+    var summaryTemplate = '<div style="background-color:red;"><h3 style="margin:0;padding:5px;">{{name}}</h3></div>';
+
+
+    $(function () {
+        var args = { 'summaryTemplate': summaryTemplate, 'detailsTemplate': detailsTemplate };
+        var tree = $('#treeDiv').tree(naryTree,args);
+        tree.show();
+
+        $(window).resize(function () {
+            tree.resizeWindow();
+        });
+        $(window).scroll(function () {
+            tree.resizeWindow();
+        });
+        $('#treeDiv').scroll(function () {
+            tree.resizeWindow();
+        });
+
+    });
+
+</script>
+</html>
