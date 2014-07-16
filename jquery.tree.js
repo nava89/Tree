@@ -5,6 +5,7 @@
     };
     var animationLock = false;
     var linesCount;
+    var nodeCount;
     TreeNode = function (tree, jsonTree, args) {
         this.markup = "";
         this.parent = jsonTree.parent;
@@ -18,6 +19,7 @@
                 child['parent'] = this;
 
                 var treeNode = new TreeNode(tree,child,args);
+                treeNode.childIndex = i;
                 this._children.push(treeNode);
             };
         }
@@ -38,12 +40,23 @@
     }
     
     TreeNode.prototype = {
+        isVisible : function(){
+            var containerOffset = $(this.tree.markup).offset();
+            var internalOffset = $(this.internalContent).offset();
+            var width = $(this.internalContent).width();
+            var height = $(this.internalContent).height();
+            var winHeight = $(window).height();
+            var winWidth = $(window).width();
+            this.visible = (internalOffset.left - containerOffset.left) >= 0 && (internalOffset.left - containerOffset.left) <= winWidth + $(this.tree.markup).scrollLeft()
+                    && (internalOffset.top - containerOffset.top) >= 0 && (internalOffset.top - containerOffset.top) <= winHeight + $(window).scrollTop();
+            return this.visible;
+         },
         /*
         * Draw lines to it children
         */
-        drawLines: function () {
+        /*drawLines: function () {
             
-            if (this._children.length == 0) {
+            if (this._children.length == 0 || this.visible == false) {
                 return;
             }
             var containerOffset = $(this.tree.markup).offset();
@@ -56,6 +69,10 @@
                 
             for (var i = 0; i < this._children.length; i++) {
                 
+                if (!this._children[i].visible) {
+                    return;
+                }
+
                 var x1 = offset1.left + i * (width1 / this._children.length) + width1 / (2 * this._children.length);
                 var y1 = offset1.top + height1 + 2;
                 x1 -= containerOffset.left;
@@ -87,7 +104,7 @@
                     if (Math.min(y1,y2) < 0) {
                         //One of the point is negative in the vertical axis
                         //We must reset this point to the intersection of the line with the x-axis
-                        var res = _lineIntersectionX(x1,x2,y1,y2);
+                        var res = this._lineIntersectionX(x1,x2,y1,y2);
                         x1 = res.x1; x2 = res.x2; y1 = res.y1; y2 = res.y2;
                     }
                     // if (Math.max(x1,x2) > winWidth) {
@@ -105,6 +122,52 @@
                     this._drawLine(x1, y1, x2, y2);
                 }
 
+                //Here check if the node is visible. If it is out of the screen then not paint it
+                child.drawLines();
+            }
+
+        },*/
+        drawLines: function () {
+            
+            if (this._children.length == 0) {
+                return;
+            }
+            if (this.visible == false) {
+                for (var i = 0; i < this._children.length; i++) {
+                    this._children[i].drawLines();
+                }
+                return;
+            }
+
+            var containerOffset = $(this.tree.markup).offset();
+            var offset1 = $(this.internalContent).offset();
+            
+            var width1 = $(this.internalContent).width();
+            var height1 = $(this.internalContent).height();
+                
+            for (var i = 0; i < this._children.length; i++) {
+                
+                if (!this._children[i].visible) {
+                    return;
+                }
+
+                var x1 = offset1.left + i * (width1 / this._children.length) + width1 / (2 * this._children.length);
+                var y1 = offset1.top + height1 + 2;
+                x1 -= containerOffset.left;
+                y1 -= containerOffset.top;
+
+                var child = this._children[i];
+                var offset2 = $(child.internalContent).offset();
+                
+                var width2 = $(child.internalContent).width();
+                var x2 = offset2.left + (width2 / 2);
+                var y2 = offset2.top - 2;
+                x2 -= containerOffset.left;
+                y2 -= containerOffset.top;
+                
+                linesCount+=1;
+                this._drawLine(x1, y1, x2, y2);
+                
                 //Here check if the node is visible. If it is out of the screen then not paint it
                 child.drawLines();
             }
@@ -202,9 +265,6 @@
             return this.column;
         },
         _drawLine: function (x1, y1, x2, y2) {
-
-            //Check if the line is inside the visible area
-               
 
             if (y1 < y2) {
                 var pom = y1;
@@ -377,12 +437,19 @@
         this.root = new TreeNode(this,this.jsonObject,args); 
         this.animationTime = 500;
         this._events = {};
-        // $(this.markup).scroll(
-        //     function(){
-        //         this.resizeWindow();
-        //     }
-            
-        // );
+        this.args = args;
+        
+        if (args.layout == 'XCollapsed') {
+            var treeHeight = this._getTreeMaxHeight(this.root);
+            this.freeColumn = [];
+            for (var i = 0; i < treeHeight; i++) {
+                this.freeColumn[i] = 0;
+            }
+            this.leavesCount = 0;
+            this.generateXCollapsedTreeNodePositions(this.root);
+        }
+
+        
     }
 
     Tree.prototype = {
@@ -409,6 +476,18 @@
         root: function () {
             return this.root;
         },
+        _getTreeMaxHeight: function(tree){
+            if (tree.isLeaf()) {
+                return 1;
+            }
+            var res = 0;
+            for (var i = 0; i < tree._children.length; i++) {
+                res = Math.max(this._getTreeMaxHeight(tree._children[i]), res);
+            }
+            res++;
+            return res;
+
+        },
         _getMaxRowColumn: function(tree) {
             var row = tree.getRow();
             var column = tree.getColumn();
@@ -431,6 +510,12 @@
             return { row : row, column : column};
         },
         show : function () {
+            this.drawTable();
+            this.drawNodes();
+            this.drawLines();
+            
+        },
+        drawTable: function(){
             var HTMLTable = document.createElement("table");
             HTMLTable.setAttribute("id", "treeTable");
             $(HTMLTable).appendTo(this.markup);
@@ -450,6 +535,7 @@
                         if(xspan > 0){
                             var td = document.createElement("td");
                             td.setAttribute("colspan", xspan);
+                            $(td).addClass('tree-td');
                             $(td).appendTo($(tr));
                         }
 
@@ -457,6 +543,7 @@
                         td = document.createElement("td");
                         td.setAttribute('id','td' + i + '_' + j );
                         td.setAttribute("colspan", 2);
+                        $(td).addClass('tree-td');
                         $(td).appendTo($(tr));
                         j+=1;
 
@@ -475,9 +562,11 @@
                     $(td).appendTo($(tr));
                 }
 
-
                 $(tr).appendTo($(HTMLTable));                
             };
+        },
+        drawNodes: function(){
+            nodeCount = 0;
             q = [];
             q.push(this.root);
             while(q.length > 0)
@@ -486,11 +575,24 @@
                 for (var i = 0; i < treeNode._children.length; i++) {
                     q.push(treeNode._children[i])
                 };
-                var td = $(HTMLTable).find('#td' + treeNode.getRow() + '_' + treeNode.getColumn());
-                $(td).append(treeNode.node());
+                var td = $('#treeTable').find('#td' + treeNode.getRow() + '_' + treeNode.getColumn());
+                if ($(td).find('.node').length > 0) {
+                    //Already exist
+                    $(td).find('.node').css('display','block');
+                }
+                else{
+                    $(td).append(treeNode.node());
+                }
+                
+                nodeCount++;
+                if (!treeNode.isVisible()) {
+                    //$(treeNode.node()).css('display','none');
+                    //nodeCount--;
+                }
+
+                
             }
-            
-            this.drawLines();
+            this.log("Nodes: " + nodeCount);
         },
         setAnimationTime : function(time){
             this.animationTime = time;
@@ -529,21 +631,94 @@
         },
         resizeWindow : function (){
             animationLock = true;
-            this._removeLines();
+           /*  this._removeLines();
             this.root.drawLines();
             $(".nodeLine").fadeIn(1000);
-
+            */
+            this._refreshTree();            
             //Releasing the lock
             animationLock = false;
+            
         },
         _removeLines : function(){
             $(".nodeLine").remove();
+        },
+        _refreshTree : function(){
+            //this._hideNodes();
+            this._removeLines();
+            this.drawNodes();
+            this.drawLines();
+
+        },
+        _hideNodes : function(){
+            $(this.markup).find('.node').css('display','none');
+            //$(this.markup).find('.node').remove();
         },
         log: function () {
             if (!window.console) { return; }
             var args = [];
             args.push.apply(args, arguments);
             console.log.apply(console, args);
+        },
+        generateXCollapsedTreeNodePositions: function(treeNode){
+
+            treeNode.row = treeNode.parent == null ? 0 : treeNode.parent.row + 1;
+            if (treeNode.isLeaf()) {
+                //Theno node is a leaf
+
+                if (treeNode.childIndex == 0) {
+                    //Is the first child. It wont be able to change it's position. Only by moving the parent it will move.
+                    treeNode.column = this.leavesCount++ * 2;
+                    treeNode.mLeft = treeNode.column - this.freeColumn[treeNode.row];
+                    this.freeColumn[treeNode.row] = treeNode.column + 2;
+
+                }
+                else
+                {
+                    treeNode.column = this.freeColumn[treeNode.row];
+                    treeNode.mLeft = 0;
+                    this.freeColumn[treeNode.row] += 2;
+
+                }
+            }
+            else{
+                //Not leaf
+
+                for (var i = 0; i < treeNode._children.length; i++) {
+                    //Calculate the position of it's children
+                    this.generateXCollapsedTreeNodePositions(treeNode._children[i], this.freeColumn);
+                }
+                if (treeNode._children.length == 1) {
+                    //Place the parent above the only child
+                    treeNode.column = treeNode._children[0].column;
+                }
+                else{
+                    //Place the parent in the middle of the children
+                    treeNode.column = (treeNode._children[0].column + treeNode._children[treeNode._children.length - 1].column)/2; 
+                }
+                //Calculate how much can the subtree be moved to the left
+                treeNode.mLeft = Math.min(treeNode.column - this.freeColumn[treeNode.row],treeNode._children[0].mLeft);
+                //Update the last free column on the row
+                this.freeColumn[treeNode.row] = treeNode.column + 2;
+
+                this._moveTree(treeNode,treeNode.mLeft);
+
+            }
+
+        },
+        _moveTree: function(treeNode, n){
+            if (n == 0) return;
+            
+            if (this.freeColumn[treeNode.row] == treeNode.column + 2) {
+                this.freeColumn[treeNode.row] -= n;
+            }
+            treeNode.column -= n;
+            treeNode.mLeft -= n;
+            if (!treeNode.isLeaf()) {
+                for (var i = 0; i < treeNode._children.length; i++) {
+                    this._moveTree(treeNode._children[i],n);
+                }
+            }
         }
         
     };
